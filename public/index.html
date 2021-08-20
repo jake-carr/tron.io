@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tron.io</title>
+    <style>
+      .hostName {
+        color: red;
+      }
+      .guestName {
+        color: blue;
+      }
+    </style>
+</head>
+<body>
+  <div id="main">
+    <h2>Welcome to Tron.io</h2>
+    <button type="button" id="host">Host a Lobby</button>
+    <button type="button" id="join">Join a Lobby</button>
+    <div id="roomList"></div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="tron.js"></script>
+</html>
