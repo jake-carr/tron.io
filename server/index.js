@@ -65,12 +65,37 @@ io.on('connection', (socket) => {
     }
   });
 
+  /**
+   * Quick fire a new game in an existing lobby, with current names & updated score.
+   */
+
+  socket.on('GAME_RESTART_REQUEST', (roomId, gameState) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    io.in(room.name).emit('GAME_RESTART', gameState);
+  });
+
   socket.on('GAME_UPDATE', (roomId, gameState) => {
     // Recieves true game state from host client on an interval and emits it to the lobby.
     const room = rooms[roomId];
     if (!room) return;
 
     io.in(room.name).emit('GAME_TICK', gameState);
+  });
+
+  /**
+   * Handles the game ending.
+   */
+  socket.on('GAME_END_NOTICE', (roomId, { winner, reason }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    console.log(`Game in ${room.name} is ending!`);
+    console.log(`Winner: ${winner}`);
+    console.log(`Reason: ${reason}`);
+
+    io.in(room.name).emit('GAME_END', { winner, reason });
   });
 
   /**

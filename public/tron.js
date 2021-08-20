@@ -114,13 +114,13 @@ function renderLobby(room, host, guest) {
   title.innerText = `You are in lobby: "${lobbyName}" :^)`;
 
   const hostName = document.createElement('p');
-  hostName.classList.add('hostName');
+  hostName.classList.add('red');
   hostName.innerText = `Host: ${host.username}`;
   playerList.appendChild(hostName);
 
   if (guest) {
     const guestName = document.createElement('p');
-    guestName.classList.add('guestName');
+    guestName.classList.add('blue');
     guestName.innerText = `Guest: ${guest.username}`;
     playerList.appendChild(guestName);
   }
@@ -149,6 +149,7 @@ let GAME_STATE = {
     dx: -10,
     dy: 0,
     score: 0,
+    name: '',
   },
   blue: {
     snake: [{ x: 410, y: 290 }],
@@ -156,24 +157,47 @@ let GAME_STATE = {
     dx: 10,
     dy: 0,
     score: 0,
+    name: '',
   },
 };
-let winner = false;
+let gameHasEnded = false;
 
 function initializeGame(
   red_name,
   blue_name,
   red_score = 0,
   blue_score = 0,
+  isRestart = false,
 ) {
+  // Setup
   clear();
+  if (!isRestart) {
+    // Save usernames on first game
+    GAME_STATE.red.name = red_name;
+    GAME_STATE.blue.name = blue_name;
+  } else {
+    // Reset to default values on fields other than score and name
+    GAME_STATE.red.snake = [{ x: 400, y: 290 }];
+    GAME_STATE.red.isTurning = false;
+    GAME_STATE.red.dx = -10;
+    GAME_STATE.red.dy = 0;
+    GAME_STATE.blue.snake = [{ x: 410, y: 290 }];
+    GAME_STATE.blue.isTurning = false;
+    GAME_STATE.blue.dx = 10;
+    GAME_STATE.blue.dy = 0;
+  }
 
+  // Create scoreboard elements
   const scoreboard = document.createElement('div');
+  scoreboard.setAttribute('id', 'scoreboard');
+
   const scoreRED = document.createElement('p');
   const scoreBLUE = document.createElement('p');
 
   scoreRED.innerText = `${red_name}: ${red_score}`;
+  scoreRED.classList.add('red');
   scoreBLUE.innerText = `${blue_name}: ${blue_score}`;
+  scoreBLUE.classList.add('blue');
 
   scoreboard.appendChild(scoreRED);
   scoreboard.appendChild(scoreBLUE);
@@ -186,7 +210,7 @@ function initializeGame(
   main.appendChild(scoreboard);
   main.appendChild(arena);
 
-  // If user is host, invoke main game function.
+  // If user is host, start the game.
   if (USER.hosting) {
     tron();
   }
@@ -200,6 +224,73 @@ socket.on('GAME_START', (host, guest) => {
     host.score,
     guest.score,
   );
+});
+
+socket.on('GAME_RESTART', (gameState) => {
+  console.log('New game!');
+
+  // Update score
+  GAME_STATE = gameState;
+  const { red, blue } = gameState;
+
+  // Begin
+  gameHasEnded = false;
+  initializeGame(
+    red.name,
+    blue.name,
+    red.score,
+    blue.score,
+    'restart',
+  );
+});
+
+socket.on('GAME_END', ({ winner, reason }) => {
+  console.log(`
+    The game has ended! \n
+    Winner: ${winner} \n
+    Reason: ${reason}
+    `);
+  gameHasEnded = true;
+  alert(winner == 'tie' ? 'tie game!' : `${winner} wins!`);
+
+  const { red, blue } = GAME_STATE;
+
+  // Update score
+  if (winner == 'red') red.score += 1;
+  else if (winner == 'blue') blue.score += 1;
+  else if (winner == 'tie') {
+    red.score += 1;
+    blue.score += 1;
+  }
+
+  const scoreboard = document.getElementById('scoreboard');
+  while (scoreboard.firstChild) {
+    scoreboard.firstChild.remove();
+  }
+
+  const scoreRED = document.createElement('p');
+  const scoreBLUE = document.createElement('p');
+
+  scoreRED.innerText = `${red.name}: ${red.score}`;
+  scoreRED.classList.add('red');
+  scoreBLUE.innerText = `${blue.name}: ${blue.score}`;
+  scoreBLUE.classList.add('blue');
+
+  scoreboard.appendChild(scoreRED);
+  scoreboard.appendChild(scoreBLUE);
+
+  // Create restart game button
+  const restartButton = document.createElement('button');
+  restartButton.innerText = 'New game';
+  restartButton.addEventListener('click', () => {
+    if (!USER.hosting) {
+      alert('Ask the host to restart the game!');
+    } else {
+      // Emit the updated score
+      socket.emit('GAME_RESTART_REQUEST', savedRoomID, GAME_STATE);
+    }
+  });
+  main.appendChild(restartButton);
 });
 
 // Constants
@@ -218,7 +309,7 @@ const colors = {
 
 // Main game function invoked by host client every 100ms.
 function tron() {
-  if (!winner) {
+  if (!gameHasEnded) {
     check_for_win(GAME_STATE); // Emits GAME_END, winner and reason if found.
     GAME_STATE.red.isTurning = false;
     GAME_STATE.blue.isTurning = false;
@@ -249,17 +340,17 @@ function check_for_win(gameState) {
   redWins = check_wall_collision(blue);
   blueWins = check_wall_collision(red);
   if (redWins && blueWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'tie',
       reason: 'wall collision',
     });
   } else if (redWins && !blueWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'red',
       reason: 'wall collision',
     });
   } else if (blueWins && !redWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'blue',
       reason: 'wall collision',
     });
@@ -279,17 +370,17 @@ function check_for_win(gameState) {
   redWins = check_suicide(blue);
   blueWins = check_suicide(red);
   if (redWins && blueWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'tie',
       reason: 'suicide',
     });
   } else if (redWins && !blueWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'red',
       reason: 'suicide',
     });
   } else if (blueWins && !redWins) {
-    socket.emit('GAME_END', {
+    socket.emit('GAME_END_NOTICE', savedRoomID, {
       winner: 'blue',
       reason: 'suicide',
     });
@@ -316,17 +407,17 @@ function check_for_win(gameState) {
         }
       }
       if (redHitBlue && blueHitRed) {
-        socket.emit('GAME_END', {
+        socket.emit('GAME_END_NOTICE', savedRoomID, {
           winner: 'tie',
           reason: 'player collision',
         });
       } else if (redHitBlue && !blueHitRed) {
-        socket.emit('GAME_END', {
+        socket.emit('GAME_END_NOTICE', savedRoomID, {
           winner: 'blue',
           reason: 'player collision',
         });
       } else if (blueHitRed && !redHitBlue) {
-        socket.emit('GAME_END', {
+        socket.emit('GAME_END_NOTICE', savedRoomID, {
           winner: 'red',
           reason: 'player collision',
         });
@@ -337,7 +428,7 @@ function check_for_win(gameState) {
     // Check for head to head collison; tie if found
     function check_head_to_head_collision() {
       if (blue_head.x == red_head.x && blue_head.y == red_head.y) {
-        socket.emit('GAME_END', {
+        socket.emit('GAME_END_NOTICE', savedRoomID, {
           winner: 'tie',
           reason: 'head to head collision',
         });
@@ -386,11 +477,9 @@ function draw(red, blue) {
   const context = arena.getContext('2d');
 
   function draw_cell(color, x, y, is_head) {
-    if (is_head) {
-      context.fillStyle = colors[color].head;
-    } else {
-      context.fillStyle = colors[color].body;
-    }
+    context.fillStyle = is_head
+      ? colors[color].head
+      : colors[color].body;
     context.strokestyle = colors[color].outline;
 
     context.fillRect(x, y, 10, 10);
@@ -403,8 +492,8 @@ function draw(red, blue) {
     draw_cell('red', cell.x, cell.y, isHead);
   }
   for (let cell of blue.snake) {
-    let isHead = red.snake.indexOf(cell) == red.snake.length - 2;
-    draw_cell('red', cell.x, cell.y, isHead);
+    let isHead = blue.snake.indexOf(cell) == blue.snake.length - 2;
+    draw_cell('blue', cell.x, cell.y, isHead);
   }
 }
 
@@ -417,3 +506,5 @@ socket.on('GAME_TICK', (gameState) => {
   draw_board();
   draw(red, blue);
 });
+
+// Keyboard listeners
