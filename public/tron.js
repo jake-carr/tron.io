@@ -82,6 +82,8 @@ joinButton.addEventListener('click', () => {
 });
 
 /* Lobby Page */
+let savedRoomID;
+
 function renderLobby(room, host, guest) {
   clear();
 
@@ -94,6 +96,7 @@ function renderLobby(room, host, guest) {
     if (!USER.hosting) {
       alert('Only the host can start the game.');
     } else if (playerList.children.length == 2) {
+      savedRoomID = room.id;
       socket.emit(
         'GAME_START_REQUEST',
         room.id,
@@ -155,6 +158,7 @@ let GAME_STATE = {
     score: 0,
   },
 };
+let winner = false;
 
 function initializeGame(
   red_name,
@@ -182,7 +186,10 @@ function initializeGame(
   main.appendChild(scoreboard);
   main.appendChild(arena);
 
-  // If user is host, invoke main.
+  // If user is host, invoke main game function.
+  if (USER.hosting) {
+    tron();
+  }
 }
 
 socket.on('GAME_START', (host, guest) => {
@@ -193,4 +200,220 @@ socket.on('GAME_START', (host, guest) => {
     host.score,
     guest.score,
   );
+});
+
+// Constants
+const colors = {
+  red: {
+    head: 'pink',
+    body: 'red',
+    outline: 'darkred',
+  },
+  blue: {
+    head: 'lightblue',
+    body: 'blue',
+    outline: 'darkblue',
+  },
+};
+
+// Main game function invoked by host client every 100ms.
+function tron() {
+  if (!winner) {
+    check_for_win(GAME_STATE); // Emits GAME_END, winner and reason if found.
+    GAME_STATE.red.isTurning = false;
+    GAME_STATE.blue.isTurning = false;
+
+    setTimeout(function gameLoop() {
+      extend(GAME_STATE); // Extend emits GAME_TICK.
+      tron(); // Repeat
+    }, 100);
+  }
+}
+
+function check_for_win(gameState) {
+  const { red, blue } = gameState;
+  let redWins = false;
+  let blueWins = false;
+
+  // Look for wall collisions; emit tie or winner, or continue.
+  function check_wall_collision(player) {
+    const { snake } = player;
+    const head = snake[snake.length - 1];
+    const hitLeftWall = head.x < 0;
+    const hitRightWall = head.x > arena.width - 10;
+    const hitTopWall = head.y < 0;
+    const hitBottomWall = head.y > arena.height - 10;
+    return hitLeftWall || hitRightWall || hitTopWall || hitBottomWall;
+  }
+
+  redWins = check_wall_collision(blue);
+  blueWins = check_wall_collision(red);
+  if (redWins && blueWins) {
+    socket.emit('GAME_END', {
+      winner: 'tie',
+      reason: 'wall collision',
+    });
+  } else if (redWins && !blueWins) {
+    socket.emit('GAME_END', {
+      winner: 'red',
+      reason: 'wall collision',
+    });
+  } else if (blueWins && !redWins) {
+    socket.emit('GAME_END', {
+      winner: 'blue',
+      reason: 'wall collision',
+    });
+  }
+
+  // Check for collisions with self (suicides)
+  function check_suicide(player) {
+    const { snake } = player;
+    const head = snake[snake.length - 1];
+    for (let i = 0; i < snake.length - 2; i++) {
+      if (snake[i].x == head.x && snake[i].y == head.y) {
+        return true;
+      }
+    }
+  }
+
+  redWins = check_suicide(blue);
+  blueWins = check_suicide(red);
+  if (redWins && blueWins) {
+    socket.emit('GAME_END', {
+      winner: 'tie',
+      reason: 'suicide',
+    });
+  } else if (redWins && !blueWins) {
+    socket.emit('GAME_END', {
+      winner: 'red',
+      reason: 'suicide',
+    });
+  } else if (blueWins && !redWins) {
+    socket.emit('GAME_END', {
+      winner: 'blue',
+      reason: 'suicide',
+    });
+
+    let red_head = red.snake[red.snake.length - 1];
+    let blue_head = blue.snake[blue.snake.length - 1];
+
+    // Check for head/body collisions; emit tie or winner, or continue.
+    function check_head_body_collision() {
+      let redHitBlue = false;
+      let blueHitRed = false;
+      for (let i = 0; i < red.snake.length - 2; i++) {
+        if (
+          red.snake[i].x == blue_head.x &&
+          red.snake[i].y == blue_head.y
+        ) {
+          blueHitRed = true;
+        }
+        if (
+          blue.snake[i].x == red_head.x &&
+          blue.snake[i].y == red_head.y
+        ) {
+          redHitBlue = true;
+        }
+      }
+      if (redHitBlue && blueHitRed) {
+        socket.emit('GAME_END', {
+          winner: 'tie',
+          reason: 'player collision',
+        });
+      } else if (redHitBlue && !blueHitRed) {
+        socket.emit('GAME_END', {
+          winner: 'blue',
+          reason: 'player collision',
+        });
+      } else if (blueHitRed && !redHitBlue) {
+        socket.emit('GAME_END', {
+          winner: 'red',
+          reason: 'player collision',
+        });
+      }
+    }
+    check_head_body_collision();
+
+    // Check for head to head collison; tie if found
+    function check_head_to_head_collision() {
+      if (blue_head.x == red_head.x && blue_head.y == red_head.y) {
+        socket.emit('GAME_END', {
+          winner: 'tie',
+          reason: 'head to head collision',
+        });
+      }
+    }
+    check_head_to_head_collision();
+  }
+}
+
+function extend(gameState) {
+  const { red, blue } = gameState;
+
+  // Create the new heads
+  function calculate_position(player) {
+    return {
+      x: player.snake[player.snake.length - 1].x + player.dx,
+      y: player.snake[player.snake.length - 1].y + player.dy,
+    };
+  }
+
+  // Append new position to bodies
+  red.snake.push(calculate_position(red));
+  blue.snake.push(calculate_position(blue));
+
+  // Emit game update
+  socket.emit('GAME_UPDATE', savedRoomID, gameState);
+}
+
+// Canvas drawing functions
+function draw_board() {
+  const arena = document.getElementById('arena');
+  const context = arena.getContext('2d');
+  // Draw a border around the canvas
+  // Background color
+  context.fillStyle = 'white';
+  // Border color
+  context.strokestyle = 'black';
+  // Conver canvas with filled rectangle
+  context.fillRect(0, 0, arena.width, arena.height);
+  // Draw a "border" around the entire canvas
+  context.strokeRect(0, 0, arena.width, arena.height);
+}
+
+function draw(red, blue) {
+  const arena = document.getElementById('arena');
+  const context = arena.getContext('2d');
+
+  function draw_cell(color, x, y, is_head) {
+    if (is_head) {
+      context.fillStyle = colors[color].head;
+    } else {
+      context.fillStyle = colors[color].body;
+    }
+    context.strokestyle = colors[color].outline;
+
+    context.fillRect(x, y, 10, 10);
+    context.strokeRect(x, y, 10, 10);
+  }
+
+  // Draw both players.
+  for (let cell of red.snake) {
+    let isHead = red.snake.indexOf(cell) == red.snake.length - 2;
+    draw_cell('red', cell.x, cell.y, isHead);
+  }
+  for (let cell of blue.snake) {
+    let isHead = red.snake.indexOf(cell) == red.snake.length - 2;
+    draw_cell('red', cell.x, cell.y, isHead);
+  }
+}
+
+socket.on('GAME_TICK', (gameState) => {
+  // Update local game state
+  GAME_STATE = gameState;
+  const { red, blue } = GAME_STATE;
+
+  // Re-render
+  draw_board();
+  draw(red, blue);
 });

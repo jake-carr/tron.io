@@ -65,18 +65,28 @@ io.on('connection', (socket) => {
     }
   });
 
-  // TODO: GAME_TICK
+  socket.on('GAME_UPDATE', (roomId, gameState) => {
+    // Recieves true game state from host client on an interval and emits it to the lobby.
+    const room = rooms[roomId];
+    if (!room) return;
+
+    io.in(room.name).emit('GAME_TICK', gameState);
+  });
 
   /**
    * Gets fired every time a player changes direction.
    * @param direction Processed arrow key press indicating which way to move
    */
-  socket.on('directionChange', (direction) => {
-    const room = rooms[socket.roomId];
-    if (!room) return;
-    for (const client of room.sockets) {
-      // Emit which player (socket.id) moved in which @direction.
-    }
+  socket.on('CHANGE_DIR', (roomId, userId, direction) => {
+    const room = rooms[roomId];
+    // const connections = room.socketIds;
+    // if (!room) return;
+    // if (
+    //   connections.includes(host.socketID) &&
+    //   connections.includes(guest.socketID)
+    // ) {
+    //   io.in(room.name).emit('GAME_START', host, guest);
+    // }
   });
 
   /**
