@@ -296,28 +296,26 @@ socket.on('GAME_END', ({ winner, reason }) => {
 // Constants
 const colors = {
   red: {
-    head: 'pink',
-    body: 'red',
-    outline: 'darkred',
+    head: 'rgb(255, 0, 0)',
+    body: 'rgb(200, 0, 0)',
+    outline: 'rgb(100, 0, 0)',
   },
   blue: {
-    head: 'lightblue',
-    body: 'blue',
-    outline: 'darkblue',
+    head: 'rgb(25, 0, 255)',
+    body: 'rgb(20, 0, 200)',
+    outline: 'rgb(10, 0, 100)',
   },
 };
 
-// Main game function invoked by host client every 100ms.
+// Main game function invoked by host client every 125ms.
 function tron() {
   if (!gameHasEnded) {
     check_for_win(GAME_STATE); // Emits GAME_END, winner and reason if found.
-    GAME_STATE.red.isTurning = false;
-    GAME_STATE.blue.isTurning = false;
 
     setTimeout(function gameLoop() {
-      extend(GAME_STATE); // Extend emits GAME_TICK.
+      extend(GAME_STATE); // Extend emits GAME_TICKs based on host game state.
       tron(); // Repeat
-    }, 100);
+    }, 125);
   }
 }
 
@@ -384,60 +382,71 @@ function check_for_win(gameState) {
       winner: 'blue',
       reason: 'suicide',
     });
+  }
+
+  // Check for head/body collisions; emit tie or a winner, or continue.
+  function check_head_body_collisions(red, blue) {
+    console.log('checking hb collisions..');
+    console.log(typeof red, typeof blue);
+    let red_hit_blue = false;
+    let blue_hit_red = false;
 
     let red_head = red.snake[red.snake.length - 1];
     let blue_head = blue.snake[blue.snake.length - 1];
 
-    // Check for head/body collisions; emit tie or winner, or continue.
-    function check_head_body_collision() {
-      let redHitBlue = false;
-      let blueHitRed = false;
-      for (let i = 0; i < red.snake.length - 2; i++) {
-        if (
-          red.snake[i].x == blue_head.x &&
-          red.snake[i].y == blue_head.y
-        ) {
-          blueHitRed = true;
-        }
-        if (
-          blue.snake[i].x == red_head.x &&
-          blue.snake[i].y == red_head.y
-        ) {
-          redHitBlue = true;
-        }
-      }
-      if (redHitBlue && blueHitRed) {
-        socket.emit('GAME_END_NOTICE', savedRoomID, {
-          winner: 'tie',
-          reason: 'player collision',
-        });
-      } else if (redHitBlue && !blueHitRed) {
-        socket.emit('GAME_END_NOTICE', savedRoomID, {
-          winner: 'blue',
-          reason: 'player collision',
-        });
-      } else if (blueHitRed && !redHitBlue) {
-        socket.emit('GAME_END_NOTICE', savedRoomID, {
-          winner: 'red',
-          reason: 'player collision',
-        });
+    // Check if blue's head is colliding with red's body
+    for (let i = 0; i < red.snake.length - 2; i++) {
+      if (
+        red.snake[i].x == blue_head.x &&
+        red.snake[i].y == blue_head.y
+      ) {
+        blue_hit_red = true;
       }
     }
-    check_head_body_collision();
-
-    // Check for head to head collison; tie if found
-    function check_head_to_head_collision() {
-      if (blue_head.x == red_head.x && blue_head.y == red_head.y) {
-        socket.emit('GAME_END_NOTICE', savedRoomID, {
-          winner: 'tie',
-          reason: 'head to head collision',
-        });
+    // Check if red's head is colliding with blue's body
+    for (let j = 0; j < blue.snake.length - 2; j++) {
+      console.log('comparing ', blue.snake[j], ' to ', red_head);
+      if (
+        blue.snake[j].x == red_head.x &&
+        blue.snake[j].y == red_head.y
+      ) {
+        red_hit_blue = true;
       }
     }
-    check_head_to_head_collision();
+    if (red_hit_blue && blue_hit_red) {
+      socket.emit('GAME_END_NOTICE', savedRoomID, {
+        winner: 'tie',
+        reason: 'player collision',
+      });
+    } else if (red_hit_blue && !blue_hit_red) {
+      socket.emit('GAME_END_NOTICE', savedRoomID, {
+        winner: 'blue',
+        reason: 'player collision',
+      });
+    } else if (!red_hit_blue && blue_hit_red) {
+      socket.emit('GAME_END_NOTICE', savedRoomID, {
+        winner: 'red',
+        reason: 'player collision',
+      });
+    }
   }
+  check_head_body_collisions(red, blue);
+
+  // Check for head to head collison; tie if found
+  function check_head_to_head_collision() {
+    let red_head = red.snake[red.snake.length - 1];
+    let blue_head = blue.snake[blue.snake.length - 1];
+    if (blue_head.x == red_head.x && blue_head.y == red_head.y) {
+      socket.emit('GAME_END_NOTICE', savedRoomID, {
+        winner: 'tie',
+        reason: 'head to head collision',
+      });
+    }
+  }
+  check_head_to_head_collision();
 }
 
+// One cycle/tick of the game
 function extend(gameState) {
   const { red, blue } = gameState;
 
@@ -452,6 +461,10 @@ function extend(gameState) {
   // Append new position to bodies
   red.snake.push(calculate_position(red));
   blue.snake.push(calculate_position(blue));
+
+  // Reset isTurning for both
+  red.isTurning = false;
+  blue.isTurning = false;
 
   // Emit game update
   socket.emit('GAME_UPDATE', savedRoomID, gameState);
@@ -488,18 +501,18 @@ function draw(red, blue) {
 
   // Draw both players.
   for (let cell of red.snake) {
-    let isHead = red.snake.indexOf(cell) == red.snake.length - 2;
+    let isHead = red.snake.indexOf(cell) == red.snake.length - 1;
     draw_cell('red', cell.x, cell.y, isHead);
   }
   for (let cell of blue.snake) {
-    let isHead = blue.snake.indexOf(cell) == blue.snake.length - 2;
+    let isHead = blue.snake.indexOf(cell) == blue.snake.length - 1;
     draw_cell('blue', cell.x, cell.y, isHead);
   }
 }
 
-socket.on('GAME_TICK', (gameState) => {
+socket.on('GAME_TICK', (gameUpdate) => {
   // Update local game state
-  GAME_STATE = gameState;
+  GAME_STATE = gameUpdate;
   const { red, blue } = GAME_STATE;
 
   // Re-render
@@ -507,4 +520,27 @@ socket.on('GAME_TICK', (gameState) => {
   draw(red, blue);
 });
 
-// Keyboard listeners
+// Movement
+function handleDirectionChange(event) {
+  const room = USER.room;
+  if (!room) return;
+
+  const roomId = room.id;
+  const keyCode = event.keyCode;
+  const controls = {
+    37: 'LEFT',
+    39: 'RIGHT',
+    38: 'UP',
+    40: 'DOWN',
+  };
+  if (!controls[keyCode]) return;
+
+  const direction = controls[keyCode];
+  const isRed = USER.hosting;
+  const gameState = GAME_STATE;
+
+  socket.emit('directionChange', roomId, isRed, gameState, direction);
+}
+
+// Keyboard listener to emit direction change
+document.addEventListener('keydown', handleDirectionChange);

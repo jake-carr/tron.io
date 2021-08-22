@@ -17,7 +17,7 @@ server.listen(port, () => {
   console.log(`Server is up on port ${port}.`);
 });
 
-// Global list of rooms (lobbies)
+// Global list of rooms (called lobbies on front-end)
 const rooms = {};
 
 /**
@@ -51,7 +51,7 @@ io.on('connection', (socket) => {
   console.log(`User ${socket.id} connected to the server.`);
 
   /**
-   * Fire the game if the lobby has two connected players
+   * Fire the game if the lobby has two connected players.
    */
   socket.on('GAME_START_REQUEST', (roomId, host, guest) => {
     const room = rooms[roomId];
@@ -66,7 +66,7 @@ io.on('connection', (socket) => {
   });
 
   /**
-   * Quick fire a new game in an existing lobby, with current names & updated score.
+   * Quick fire a new game in an existing lobby, with current names & most recent score.
    */
 
   socket.on('GAME_RESTART_REQUEST', (roomId, gameState) => {
@@ -85,6 +85,87 @@ io.on('connection', (socket) => {
   });
 
   /**
+   * Handles incoming direction change requests
+   * @param isRed whether they are the host of their room;
+   * @param direction string 'LEFT', 'RIGHT', 'UP' or 'DOWN'
+   * Emits updated game state with the player's new direction
+   */
+  socket.on(
+    'directionChange',
+    (roomId, isRed, gameState, direction) => {
+      const room = rooms[roomId];
+      if (!room) return;
+
+      const { red, blue } = gameState;
+      let gameUpdate = { ...gameState };
+
+      if (isRed) {
+        if (red.isTurning) {
+          return;
+        }
+        red.isTurning = true;
+
+        let dx = red.dx;
+        let dy = red.dy;
+
+        const goingUp = dy === -10;
+        const goingDown = dy === 10;
+        const goingRight = dx === 10;
+        const goingLeft = dx === -10;
+
+        if (direction === 'LEFT' && !goingRight) {
+          gameUpdate.red.dx = -10;
+          gameUpdate.red.dy = 0;
+        }
+        if (direction === 'UP' && !goingDown) {
+          gameUpdate.red.dx = 0;
+          gameUpdate.red.dy = -10;
+        }
+        if (direction === 'RIGHT' && !goingLeft) {
+          gameUpdate.red.dx = 10;
+          gameUpdate.red.dy = 0;
+        }
+        if (direction === 'DOWN' && !goingUp) {
+          gameUpdate.red.dx = 0;
+          gameUpdate.red.dy = 10;
+        }
+      } else {
+        if (blue.isTurning) {
+          return;
+        }
+        blue.isTurning = true;
+
+        let dx = blue.dx;
+        let dy = blue.dy;
+
+        const goingUp = dy === -10;
+        const goingDown = dy === 10;
+        const goingRight = dx === 10;
+        const goingLeft = dx === -10;
+
+        if (direction === 'LEFT' && !goingRight) {
+          gameUpdate.blue.dx = -10;
+          gameUpdate.blue.dy = 0;
+        }
+        if (direction === 'UP' && !goingDown) {
+          gameUpdate.blue.dx = 0;
+          gameUpdate.blue.dy = -10;
+        }
+        if (direction === 'RIGHT' && !goingLeft) {
+          gameUpdate.blue.dx = 10;
+          gameUpdate.blue.dy = 0;
+        }
+        if (direction === 'DOWN' && !goingUp) {
+          gameUpdate.blue.dx = 0;
+          gameUpdate.blue.dy = 10;
+        }
+      }
+
+      io.in(room.name).emit('GAME_TICK', gameUpdate);
+    },
+  );
+
+  /**
    * Handles the game ending.
    */
   socket.on('GAME_END_NOTICE', (roomId, { winner, reason }) => {
@@ -96,22 +177,6 @@ io.on('connection', (socket) => {
     console.log(`Reason: ${reason}`);
 
     io.in(room.name).emit('GAME_END', { winner, reason });
-  });
-
-  /**
-   * Gets fired every time a player changes direction.
-   * @param direction Processed arrow key press indicating which way to move
-   */
-  socket.on('CHANGE_DIR', (roomId, userId, direction) => {
-    const room = rooms[roomId];
-    // const connections = room.socketIds;
-    // if (!room) return;
-    // if (
-    //   connections.includes(host.socketID) &&
-    //   connections.includes(guest.socketID)
-    // ) {
-    //   io.in(room.name).emit('GAME_START', host, guest);
-    // }
   });
 
   /**
