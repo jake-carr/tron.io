@@ -214,7 +214,7 @@ io.on('connection', (socket) => {
     socket.username = user.username;
 
     rooms[room.id] = room;
-    console.log(`user ${socket.username} created room ${roomName}`);
+    console.log(`User ${socket.username} created room ${roomName}`);
 
     // have the socket join the room they've just created.
     socket.join(room.name);
@@ -240,11 +240,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('guestJoined', (roomId, guest) => {
+  socket.on('guestJoinedOrLeft', (roomId, guest) => {
     const lobby = rooms[roomId];
     if (!lobby) return;
-    if (guest) {
-      // Update guest object with server/game info then send it back to the lobby
+
+    if (guest == 'GONE') {
+      // Re-render the lobby on host side when a guest leaves.
+      socket.to(lobby.name).emit('renderGuest', 'GONE');
+    } else {
+      // Update guest object with server/game info, then send back to the host & render it.
       guest.socketID = socket.id;
       guest.room = lobby;
       guest.hosting = false;
@@ -257,6 +261,17 @@ io.on('connection', (socket) => {
    */
   socket.on('leaveRoom', () => {
     leaveRooms(socket);
+  });
+
+  /**
+   * When a host closes their room, delete it from global room list and send guests back to landing page.
+   */
+  socket.on('roomClosed', (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    socket.to(room.name).emit('BACK_TO_LANDING');
+    leaveRooms(socket);
+    delete rooms[roomId];
   });
 
   /**

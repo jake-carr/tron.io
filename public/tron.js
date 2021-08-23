@@ -37,11 +37,14 @@ function hostLobby() {
   socket.emit('createRoom', roomName, USER, callback);
 }
 
-hostButton.addEventListener('click', () => hostLobby());
-
-joinButton.addEventListener('click', () => {
+function joinLobby() {
   function callback(rooms) {
-    const roomList = document.getElementById('roomList');
+    let roomList = document.getElementById('roomList');
+    if (!roomList) {
+      roomList = document.createElement('div');
+      roomList.setAttribute('id', 'roomList');
+    }
+
     while (roomList.firstChild) {
       roomList.firstChild.remove();
     }
@@ -71,7 +74,7 @@ joinButton.addEventListener('click', () => {
             console.log(
               `${USER.username} joined lobby: ${lobby.name}`,
             );
-            socket.emit('guestJoined', lobby.id, USER);
+            socket.emit('guestJoinedOrLeft', lobby.id, USER);
             renderLobby(lobby, lobby.host.user, USER);
           }
         }
@@ -102,7 +105,10 @@ joinButton.addEventListener('click', () => {
   }
 
   socket.emit('getRoomNames', callback);
-});
+}
+
+hostButton.addEventListener('click', () => hostLobby());
+joinButton.addEventListener('click', () => joinLobby());
 
 /* Lobby */
 let savedRoomID;
@@ -113,6 +119,7 @@ function renderLobby(room, host, guest) {
   // Create lobby elements
   const playerList = document.createElement('div');
   const start = document.createElement('button');
+  const leave = document.createElement('button');
 
   start.innerText = 'Start game';
   start.addEventListener('click', () => {
@@ -129,6 +136,21 @@ function renderLobby(room, host, guest) {
       );
     } else {
       alert('Need two players to start.');
+    }
+  });
+
+  leave.innerText = 'Leave lobby';
+  leave.addEventListener('click', () => {
+    if (USER.hosting) {
+      // Disconnect socket, let guest know, and refresh page if host
+      socket.emit('roomClosed', room.id);
+      socket.emit('leaveRoom');
+      window.location = location;
+    } else {
+      // Emit leaving update to the host client first if guest
+      socket.emit('guestJoinedOrLeft', room.id, 'GONE');
+      socket.emit('leaveRoom');
+      window.location = location;
     }
   });
 
@@ -151,17 +173,50 @@ function renderLobby(room, host, guest) {
   main.appendChild(title);
   main.appendChild(playerList);
   main.appendChild(start);
+  main.appendChild(leave);
 }
 
-// Re-render lobby HTML on host side once a guest joins.
+// Re-render lobby HTML on host side once a guest joins or leaves.
 socket.on('renderGuest', (guest) => {
   if (USER.hosting) {
-    console.log(`Guest ${guest.username} joined.`);
-    renderLobby(USER.room, USER, guest);
+    if (guest == 'GONE') {
+      console.log(`They left.`);
+      renderLobby(USER.room, USER, null);
+    } else {
+      console.log(`Guest ${guest.username} joined.`);
+      renderLobby(USER.room, USER, guest);
+    }
   }
 });
 
-// TODO handle guests leaving/rooms closing.
+// Send guests 'back to the landing page' when the host closes the lobby they were in.
+socket.on('BACK_TO_LANDING', () => {
+  alert('Sorry, the host closed that lobby :^/');
+
+  clear();
+
+  const title = document.createElement('h2');
+  const hostGame = document.createElement('button');
+  const joinGame = document.createElement('button');
+  const roomList = document.createElement('div');
+
+  title.innerText = 'Welcome to Tron.io';
+
+  hostGame.innerText = 'Host a Lobby';
+  hostGame.addEventListener('click', () => hostLobby());
+
+  joinGame.innerText = 'Join a Lobby';
+  joinGame.addEventListener('click', () => joinLobby());
+
+  main.appendChild(title);
+  main.appendChild(hostGame);
+  main.appendChild(joinGame);
+  main.appendChild(roomList);
+
+  usernameinput = window.prompt('Username ?');
+  if (!usernameinput) usernameinput = 'GUEST';
+  USER.username = usernameinput;
+});
 
 /* Game */
 // Red is always host/source of truth.
