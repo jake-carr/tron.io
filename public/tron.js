@@ -222,7 +222,7 @@ socket.on('BACK_TO_LANDING', () => {
 // Red is always host/source of truth.
 let GAME_STATE = {
   red: {
-    snake: [{ x: 400, y: 290 }],
+    snake: [{ x: 450, y: 290 }],
     isTurning: false,
     dx: -10,
     dy: 0,
@@ -230,7 +230,7 @@ let GAME_STATE = {
     name: '',
   },
   blue: {
-    snake: [{ x: 410, y: 290 }],
+    snake: [{ x: 460, y: 290 }],
     isTurning: false,
     dx: 10,
     dy: 0,
@@ -255,11 +255,11 @@ function initializeGame(
     GAME_STATE.blue.name = blue_name;
   } else {
     // Reset to default values on fields other than score and name
-    GAME_STATE.red.snake = [{ x: 400, y: 290 }];
+    GAME_STATE.red.snake = [{ x: 450, y: 290 }];
     GAME_STATE.red.isTurning = false;
     GAME_STATE.red.dx = -10;
     GAME_STATE.red.dy = 0;
-    GAME_STATE.blue.snake = [{ x: 410, y: 290 }];
+    GAME_STATE.blue.snake = [{ x: 460, y: 290 }];
     GAME_STATE.blue.isTurning = false;
     GAME_STATE.blue.dx = 10;
     GAME_STATE.blue.dy = 0;
@@ -465,8 +465,6 @@ function check_for_win(gameState) {
 
   // Check for head/body collisions; emit tie or a winner, or continue.
   function check_head_body_collisions(red, blue) {
-    console.log('checking hb collisions..');
-    console.log(typeof red, typeof blue);
     let red_hit_blue = false;
     let blue_hit_red = false;
 
