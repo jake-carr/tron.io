@@ -233,10 +233,11 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.socketIds.length == 2) {
       callback('Error: Room Full');
+    } else {
+      socket.join(room.name);
+      room.socketIds.push(socket.id);
+      callback(room);
     }
-    socket.join(room.name);
-    room.socketIds.push(socket.id);
-    callback(room);
   });
 
   socket.on('guestJoined', (roomId, guest) => {

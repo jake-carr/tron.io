@@ -23,7 +23,7 @@ function clear() {
 
 /* Home Page */
 
-hostButton.addEventListener('click', () => {
+function hostLobby() {
   const roomName = prompt('Name of Lobby: ');
 
   function callback(room) {
@@ -35,7 +35,9 @@ hostButton.addEventListener('click', () => {
   }
 
   socket.emit('createRoom', roomName, USER, callback);
-});
+}
+
+hostButton.addEventListener('click', () => hostLobby());
 
 joinButton.addEventListener('click', () => {
   function callback(rooms) {
@@ -43,34 +45,55 @@ joinButton.addEventListener('click', () => {
     while (roomList.firstChild) {
       roomList.firstChild.remove();
     }
+
+    // Title the list if there are rooms
+    if (rooms && rooms.length) {
+      const title = document.createElement('h2');
+      title.innerText = 'Lobbies:';
+      roomList.appendChild(title);
+    }
+
     // Make a button for each available room
     for (let room of rooms) {
       const option = document.createElement('button');
       option.innerText = room.name;
-      // Function to join room
+
+      // Function to join a lobby
       option.addEventListener('click', () => {
         function join(lobby) {
+          // Lobbies only have 2 player capacity
           if (lobby == 'Error: Room Full') {
-            alert('Sorry, that room is full!');
+            alert('Sorry, that Lobby is full!');
             return;
+          } else {
+            USER.hosting = false;
+            USER.room = lobby;
+            console.log(
+              `${USER.username} joined lobby: ${lobby.name}`,
+            );
+            socket.emit('guestJoined', lobby.id, USER);
+            renderLobby(lobby, lobby.host.user, USER);
           }
-          USER.hosting = false;
-          USER.room = lobby;
-          console.log(`${USER.username} joined lobby: ${lobby.name}`);
-          socket.emit('guestJoined', lobby.id, USER);
-          renderLobby(lobby, lobby.host.user, USER);
         }
         socket.emit('joinRoom', room.id, join);
       });
       roomList.appendChild(option);
     }
 
-    // If roomList is empty, display a message
+    // If no rooms, display a message and show a Host button instead
     if (!roomList.children.length) {
       clear();
+
       const noRooms = document.createElement('p');
-      noRooms.innerText = 'No rooms found!';
+      noRooms.innerText = 'No lobbies found! :^(';
+
+      const hostInstead = document.createElement('button');
+      hostInstead.setAttribute('id', 'host');
+      hostInstead.innerText = 'Host a lobby instead';
+      hostInstead.addEventListener('click', () => hostLobby());
+
       roomList.appendChild(noRooms);
+      roomList.appendChild(hostInstead);
     }
 
     // Append list to page and change button text to refresh
@@ -81,7 +104,7 @@ joinButton.addEventListener('click', () => {
   socket.emit('getRoomNames', callback);
 });
 
-/* Lobby Page */
+/* Lobby */
 let savedRoomID;
 
 function renderLobby(room, host, guest) {
@@ -204,7 +227,7 @@ function initializeGame(
 
   const arena = document.createElement('CANVAS');
   arena.setAttribute('id', 'arena');
-  arena.setAttribute('width', '810');
+  arena.setAttribute('width', '910');
   arena.setAttribute('height', '500');
 
   main.appendChild(scoreboard);
@@ -290,10 +313,11 @@ socket.on('GAME_END', ({ winner, reason }) => {
       socket.emit('GAME_RESTART_REQUEST', savedRoomID, GAME_STATE);
     }
   });
-  main.appendChild(restartButton);
+
+  scoreboard.appendChild(restartButton);
 });
 
-// Constants
+// Color vars
 const colors = {
   red: {
     head: 'rgb(255, 0, 0)',
@@ -405,7 +429,6 @@ function check_for_win(gameState) {
     }
     // Check if red's head is colliding with blue's body
     for (let j = 0; j < blue.snake.length - 2; j++) {
-      console.log('comparing ', blue.snake[j], ' to ', red_head);
       if (
         blue.snake[j].x == red_head.x &&
         blue.snake[j].y == red_head.y
