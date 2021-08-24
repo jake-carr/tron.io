@@ -10,8 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
-const game = path.join(__dirname, '/../public');
-app.use(express.static(game));
+app.use(express.static(path.join(__dirname, '/public/')));
 
 server.listen(port, () => {
   console.log(`Server is up on port ${port}.`);
