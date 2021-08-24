@@ -3,7 +3,7 @@ const http = require('http');
 const express = require('express');
 const socketIO = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Server
 const app = express();
