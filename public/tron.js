@@ -1,4 +1,7 @@
-const socket = io();
+const socket = io.connect(
+  'https://master.d2f126n6sc8h0z.amplifyapp.com/',
+);
+
 const hostButton = document.getElementById('host');
 const joinButton = document.getElementById('join');
 const main = document.getElementById('main');
